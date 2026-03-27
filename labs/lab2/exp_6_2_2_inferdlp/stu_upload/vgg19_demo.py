@@ -19,10 +19,19 @@ class VGG19(object):
     def build_model(self, param_path='../../imagenet-vgg-verydeep-19.mat'):
         self.param_path = param_path
 
-       
-        # TODO: 使用net的createXXXLayer接口搭建VGG19网络
+        # Modified by Codex: build the full VGG19 inference graph with pycnnl.
         # creating layers
         self.net.setInputShape(1, 3, 224, 224)
+
+        # Modified by Codex: helper to reduce repetitive shape construction.
+        def shape4(n, c, h, w):
+            shape = pycnnl.IntVector(4)
+            shape[0] = n
+            shape[1] = c
+            shape[2] = h
+            shape[3] = w
+            return shape
+
         # conv1_1
        
         input_shape1=pycnnl.IntVector(4)
@@ -47,9 +56,49 @@ class VGG19(object):
         # relu1_2
         self.net.createReLuLayer('relu1_2')
         
-        __________________________________
-        __________________________________
-        __________________________________
+        # Modified by Codex: complete VGG19 blocks 1-5 and FC6/FC7 without flatten.
+        self.net.createPoolingLayer('pool1', shape4(1, 64, 224, 224), 2, 2)
+
+        self.net.createConvLayer('conv2_1', shape4(1, 64, 112, 112), 128, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu2_1')
+        self.net.createConvLayer('conv2_2', shape4(1, 128, 112, 112), 128, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu2_2')
+        self.net.createPoolingLayer('pool2', shape4(1, 128, 112, 112), 2, 2)
+
+        self.net.createConvLayer('conv3_1', shape4(1, 128, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu3_1')
+        self.net.createConvLayer('conv3_2', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu3_2')
+        self.net.createConvLayer('conv3_3', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu3_3')
+        self.net.createConvLayer('conv3_4', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu3_4')
+        self.net.createPoolingLayer('pool3', shape4(1, 256, 56, 56), 2, 2)
+
+        self.net.createConvLayer('conv4_1', shape4(1, 256, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu4_1')
+        self.net.createConvLayer('conv4_2', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu4_2')
+        self.net.createConvLayer('conv4_3', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu4_3')
+        self.net.createConvLayer('conv4_4', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu4_4')
+        self.net.createPoolingLayer('pool4', shape4(1, 512, 28, 28), 2, 2)
+
+        self.net.createConvLayer('conv5_1', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu5_1')
+        self.net.createConvLayer('conv5_2', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu5_2')
+        self.net.createConvLayer('conv5_3', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu5_3')
+        self.net.createConvLayer('conv5_4', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer('relu5_4')
+        self.net.createPoolingLayer('pool5', shape4(1, 512, 14, 14), 2, 2)
+
+        self.net.createMlpLayer('fc6', shape4(1, 512, 7, 7), shape4(4096, 512, 7, 7), shape4(1, 1, 1, 4096))
+        self.net.createReLuLayer('relu6')
+        self.net.createMlpLayer('fc7', shape4(1, 1, 1, 4096), shape4(1, 1, 4096, 4096), shape4(1, 1, 1, 4096))
+        self.net.createReLuLayer('relu7')
         # fc8
         
         input_shapem3=pycnnl.IntVector(4)
@@ -91,10 +140,10 @@ class VGG19(object):
         for idx in range(self.net.size()):
             if 'conv' in self.net.getLayerName(idx):
                 weight, bias = params['layers'][0][idx][0][0][0][0]
-                # TODO：调整权重形状
+                # Modified by Codex: convert conv weights to pycnnl layout.
                 # matconvnet: weights dim [height, width, in_channel, out_channel]
                 # ours: weights dim [out_channel, height, width,in_channel]
-                weight = ______________________________
+                weight = weight.transpose(3, 0, 1, 2).astype(np.float64)
                 bias = bias.reshape(-1).astype(np.float64)
                 self.net.loadParams(idx, weight, bias)
                 count += 1
@@ -102,7 +151,8 @@ class VGG19(object):
                 # Loading params may take quite a while. Please be patient.
                 weight, bias = params['layers'][0][idx][0][0][0][0]
                 weight = weight.reshape([weight.shape[0]*weight.shape[1]*weight.shape[2], weight.shape[3]])
-                weight = _______________________________
+                # Modified by Codex: convert fc weights to [out, in].
+                weight = weight.transpose(1, 0).astype(np.float64)
                 bias = bias.reshape(-1).astype(np.float64)
 
             
@@ -120,8 +170,8 @@ class VGG19(object):
         input_image = np.array(pil_img, dtype=np.float32)
         input_image -= image_mean
         input_image = np.reshape(input_image, [1]+list(input_image.shape))
-        # TODO：调整输入数据
-        input_data = ________________________
+        # Modified by Codex: convert image to NCHW layout expected by pycnnl.
+        input_data = input_image.transpose(0, 3, 1, 2).astype(np.float64)
         
         self.net.setInputData(input_data)
 
