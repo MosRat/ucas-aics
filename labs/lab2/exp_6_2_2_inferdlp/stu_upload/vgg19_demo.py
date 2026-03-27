@@ -1,4 +1,4 @@
-# -*- coding: UTF-8 -*- 
+# -*- coding: UTF-8 -*-
 import pycnnl
 import time
 import numpy as np
@@ -7,23 +7,33 @@ import scipy.io
 from PIL import Image
 import imageio.v2 as imageio
 
+
 class VGG19(object):
     def __init__(self):
         # set up net
-        
+
         self.net = pycnnl.CnnlNet()
         self.input_quant_params = []
         self.filter_quant_params = []
+        # --- stu_modified --- keep numpy arrays alive after passing their underlying buffers.
+        self._param_buffers = []
+        self._input_buffers = []
 
-   
-    def build_model(self, param_path='../../imagenet-vgg-verydeep-19.mat'):
+    # --- stu_modified --- flatten numpy arrays in C order and expose their underlying buffer.
+    def _to_numpy_data_buffer(self, array: np.ndarray):
+        flat_array = np.ascontiguousarray(
+            array.astype(np.float64), dtype=np.float64
+        ).ravel(order="C")
+        return flat_array, flat_array.data
+
+    def build_model(self, param_path="../../imagenet-vgg-verydeep-19.mat"):
         self.param_path = param_path
 
-        # Modified by Codex: build the full VGG19 inference graph with pycnnl.
+        # --- stu_modified --- build the full VGG19 inference graph with pycnnl.
         # creating layers
         self.net.setInputShape(1, 3, 224, 224)
 
-        # Modified by Codex: helper to reduce repetitive shape construction.
+        # --- stu_modified --- helper to reduce repetitive shape construction.
         def shape4(n, c, h, w):
             shape = pycnnl.IntVector(4)
             shape[0] = n
@@ -33,151 +43,178 @@ class VGG19(object):
             return shape
 
         # conv1_1
-       
-        input_shape1=pycnnl.IntVector(4)
-        input_shape1[0]=1
-        input_shape1[1]=3
-        input_shape1[2]=224
-        input_shape1[3]=224
-        self.net.createConvLayer('conv1_1', input_shape1,64, 3, 1, 1, 1)
-             
+
+        input_shape1 = pycnnl.IntVector(4)
+        input_shape1[0] = 1
+        input_shape1[1] = 3
+        input_shape1[2] = 224
+        input_shape1[3] = 224
+        self.net.createConvLayer("conv1_1", input_shape1, 64, 3, 1, 1, 1)
+
         # relu1_1
-        self.net.createReLuLayer('relu1_1')
+        self.net.createReLuLayer("relu1_1")
         # conv1_2
-        
-        input_shape12=pycnnl.IntVector(4)
-        input_shape12[0]=1
-        input_shape12[1]=64
-        input_shape12[2]=224
-        input_shape12[3]=224
 
-        self.net.createConvLayer('conv1_2',input_shape12, 64, 3, 1, 1, 1)
-        
+        input_shape12 = pycnnl.IntVector(4)
+        input_shape12[0] = 1
+        input_shape12[1] = 64
+        input_shape12[2] = 224
+        input_shape12[3] = 224
+
+        self.net.createConvLayer("conv1_2", input_shape12, 64, 3, 1, 1, 1)
+
         # relu1_2
-        self.net.createReLuLayer('relu1_2')
-        
-        # Modified by Codex: complete VGG19 blocks 1-5 and FC6/FC7 without flatten.
-        self.net.createPoolingLayer('pool1', shape4(1, 64, 224, 224), 2, 2)
+        self.net.createReLuLayer("relu1_2")
 
-        self.net.createConvLayer('conv2_1', shape4(1, 64, 112, 112), 128, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu2_1')
-        self.net.createConvLayer('conv2_2', shape4(1, 128, 112, 112), 128, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu2_2')
-        self.net.createPoolingLayer('pool2', shape4(1, 128, 112, 112), 2, 2)
+        # --- stu_modified --- complete VGG19 blocks 1-5 and FC6/FC7 without flatten.
+        self.net.createPoolingLayer("pool1", shape4(1, 64, 224, 224), 2, 2)
 
-        self.net.createConvLayer('conv3_1', shape4(1, 128, 56, 56), 256, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu3_1')
-        self.net.createConvLayer('conv3_2', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu3_2')
-        self.net.createConvLayer('conv3_3', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu3_3')
-        self.net.createConvLayer('conv3_4', shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu3_4')
-        self.net.createPoolingLayer('pool3', shape4(1, 256, 56, 56), 2, 2)
+        self.net.createConvLayer("conv2_1", shape4(1, 64, 112, 112), 128, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu2_1")
+        self.net.createConvLayer("conv2_2", shape4(1, 128, 112, 112), 128, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu2_2")
+        self.net.createPoolingLayer("pool2", shape4(1, 128, 112, 112), 2, 2)
 
-        self.net.createConvLayer('conv4_1', shape4(1, 256, 28, 28), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu4_1')
-        self.net.createConvLayer('conv4_2', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu4_2')
-        self.net.createConvLayer('conv4_3', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu4_3')
-        self.net.createConvLayer('conv4_4', shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu4_4')
-        self.net.createPoolingLayer('pool4', shape4(1, 512, 28, 28), 2, 2)
+        self.net.createConvLayer("conv3_1", shape4(1, 128, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu3_1")
+        self.net.createConvLayer("conv3_2", shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu3_2")
+        self.net.createConvLayer("conv3_3", shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu3_3")
+        self.net.createConvLayer("conv3_4", shape4(1, 256, 56, 56), 256, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu3_4")
+        self.net.createPoolingLayer("pool3", shape4(1, 256, 56, 56), 2, 2)
 
-        self.net.createConvLayer('conv5_1', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu5_1')
-        self.net.createConvLayer('conv5_2', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu5_2')
-        self.net.createConvLayer('conv5_3', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu5_3')
-        self.net.createConvLayer('conv5_4', shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
-        self.net.createReLuLayer('relu5_4')
-        self.net.createPoolingLayer('pool5', shape4(1, 512, 14, 14), 2, 2)
+        self.net.createConvLayer("conv4_1", shape4(1, 256, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu4_1")
+        self.net.createConvLayer("conv4_2", shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu4_2")
+        self.net.createConvLayer("conv4_3", shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu4_3")
+        self.net.createConvLayer("conv4_4", shape4(1, 512, 28, 28), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu4_4")
+        self.net.createPoolingLayer("pool4", shape4(1, 512, 28, 28), 2, 2)
 
-        self.net.createMlpLayer('fc6', shape4(1, 512, 7, 7), shape4(4096, 512, 7, 7), shape4(1, 1, 1, 4096))
-        self.net.createReLuLayer('relu6')
-        self.net.createMlpLayer('fc7', shape4(1, 1, 1, 4096), shape4(1, 1, 4096, 4096), shape4(1, 1, 1, 4096))
-        self.net.createReLuLayer('relu7')
+        self.net.createConvLayer("conv5_1", shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu5_1")
+        self.net.createConvLayer("conv5_2", shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu5_2")
+        self.net.createConvLayer("conv5_3", shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu5_3")
+        self.net.createConvLayer("conv5_4", shape4(1, 512, 14, 14), 512, 3, 1, 1, 1)
+        self.net.createReLuLayer("relu5_4")
+        self.net.createPoolingLayer("pool5", shape4(1, 512, 14, 14), 2, 2)
+
+        # --- stu_modified --- fc6 uses flattened [1, 1, 1, 25088] input for pycnnl MLP broadcasting.
+        self.net.createMlpLayer(
+            "fc6",
+            shape4(1, 1, 1, 25088),
+            shape4(1, 1, 25088, 4096),
+            shape4(1, 1, 1, 4096),
+        )
+        self.net.createReLuLayer("relu6")
+        # --- stu_modified --- fc7 follows the same flattened MLP convention.
+        self.net.createMlpLayer(
+            "fc7",
+            shape4(1, 1, 1, 4096),
+            shape4(1, 1, 4096, 4096),
+            shape4(1, 1, 1, 4096),
+        )
+        self.net.createReLuLayer("relu7")
         # fc8
-        
-        input_shapem3=pycnnl.IntVector(4)
-        input_shapem3[0]=1
-        input_shapem3[1]=1
-        input_shapem3[2]=1
-        input_shapem3[3]=4096
-        weight_shapem3=pycnnl.IntVector(4)
-        weight_shapem3[0]=1
-        weight_shapem3[1]=1
-        weight_shapem3[2]=4096
-        weight_shapem3[3]=1000
-        output_shapem3=pycnnl.IntVector(4)
-        output_shapem3[0]=1
-        output_shapem3[1]=1
-        output_shapem3[2]=1
-        output_shapem3[3]=1000
 
-        self.net.createMlpLayer('fc8', input_shapem3,weight_shapem3,output_shapem3)
-        
+        input_shapem3 = pycnnl.IntVector(4)
+        input_shapem3[0] = 1
+        input_shapem3[1] = 1
+        input_shapem3[2] = 1
+        input_shapem3[3] = 4096
+        weight_shapem3 = pycnnl.IntVector(4)
+        weight_shapem3[0] = 1
+        weight_shapem3[1] = 1
+        weight_shapem3[2] = 4096
+        weight_shapem3[3] = 1000
+        output_shapem3 = pycnnl.IntVector(4)
+        output_shapem3[0] = 1
+        output_shapem3[1] = 1
+        output_shapem3[2] = 1
+        output_shapem3[3] = 1000
+
+        self.net.createMlpLayer("fc8", input_shapem3, weight_shapem3, output_shapem3)
+
         # softmax
-        
-        input_shapes=pycnnl.IntVector(3)
-        input_shapes[0]=1
-        input_shapes[1]=1
-        input_shapes[2]=1000
-    
 
-        self.net.createSoftmaxLayer('softmax',input_shapes ,1)
-    
+        input_shapes = pycnnl.IntVector(3)
+        input_shapes[0] = 1
+        input_shapes[1] = 1
+        input_shapes[2] = 1000
+
+        self.net.createSoftmaxLayer("softmax", input_shapes, 1)
+
     def load_model(self):
-        # loading params ... 
-        print('Loading parameters from file ' + self.param_path)
+        # loading params ...
+        print("Loading parameters from file " + self.param_path)
         params = scipy.io.loadmat(self.param_path)
-        self.image_mean = params['normalization'][0][0][0]
+        self.image_mean = params["normalization"][0][0][0]
         self.image_mean = np.mean(self.image_mean, axis=(0, 1))
-        
+
         count = 0
         for idx in range(self.net.size()):
-            if 'conv' in self.net.getLayerName(idx):
-                weight, bias = params['layers'][0][idx][0][0][0][0]
-                # Modified by Codex: convert conv weights to pycnnl layout.
+            if "conv" in self.net.getLayerName(idx):
+                weight, bias = params["layers"][0][idx][0][0][0][0]
+                # --- stu_modified --- convert conv weights to pycnnl layout.
                 # matconvnet: weights dim [height, width, in_channel, out_channel]
                 # ours: weights dim [out_channel, height, width,in_channel]
-                weight = weight.transpose(3, 0, 1, 2).astype(np.float64)
-                bias = bias.reshape(-1).astype(np.float64)
-                self.net.loadParams(idx, weight, bias)
+                weight = weight.transpose(3, 0, 1, 2)
+                bias = bias.reshape(-1)
+                # --- stu_modified --- pass the underlying buffer of flattened float64 numpy arrays.
+                weight_array, weight_buffer = self._to_numpy_data_buffer(weight)
+                bias_array, bias_buffer = self._to_numpy_data_buffer(bias)
+                self._param_buffers.extend([weight_array, bias_array])
+                self.net.loadParams(idx, weight_buffer, bias_buffer)
                 count += 1
-            if 'fc' in self.net.getLayerName(idx):
+            if "fc" in self.net.getLayerName(idx):
                 # Loading params may take quite a while. Please be patient.
-                weight, bias = params['layers'][0][idx][0][0][0][0]
-                weight = weight.reshape([weight.shape[0]*weight.shape[1]*weight.shape[2], weight.shape[3]])
-                # Modified by Codex: convert fc weights to [out, in].
-                weight = weight.transpose(1, 0).astype(np.float64)
-                bias = bias.reshape(-1).astype(np.float64)
+                weight, bias = params["layers"][0][idx][0][0][0][0]
+                weight = weight.reshape(
+                    [
+                        weight.shape[0] * weight.shape[1] * weight.shape[2],
+                        weight.shape[3],
+                    ]
+                )
+                # --- stu_modified --- keep fc weights in MatConvNet's flattened order.
+                weight = weight
+                bias = bias.reshape(-1)
 
-            
-                self.net.loadParams(idx, weight, bias)
+                # --- stu_modified --- pass the underlying buffer of flattened float64 numpy arrays.
+                weight_array, weight_buffer = self._to_numpy_data_buffer(weight)
+                bias_array, bias_buffer = self._to_numpy_data_buffer(bias)
+                self._param_buffers.extend([weight_array, bias_array])
+                self.net.loadParams(idx, weight_buffer, bias_buffer)
                 count += 1
 
     def load_image(self, image_dir):
         # loading image
         self.image = image_dir
         image_mean = np.array([123.68, 116.779, 103.939])
-        print('Loading and preprocessing image from ' + image_dir)
+        print("Loading and preprocessing image from " + image_dir)
         input_image = imageio.imread(image_dir)
         pil_img = Image.fromarray(input_image)
         pil_img = pil_img.resize((224, 224), Image.Resampling.LANCZOS)
         input_image = np.array(pil_img, dtype=np.float32)
         input_image -= image_mean
-        input_image = np.reshape(input_image, [1]+list(input_image.shape))
-        # Modified by Codex: convert image to NCHW layout expected by pycnnl.
-        input_data = input_image.transpose(0, 3, 1, 2).astype(np.float64)
-        
-        self.net.setInputData(input_data)
+        input_image = np.reshape(input_image, [1] + list(input_image.shape))
+        # --- stu_modified --- keep input layout aligned with the verified pycnnl VGG pipeline.
+        input_data = input_image
+        # input_data = input_image.transpose(0, 3, 1, 2)
+        # --- stu_modified --- pass the underlying buffer of flattened float64 numpy input.
+        input_array, input_buffer = self._to_numpy_data_buffer(input_data)
+        self._input_buffers.append(input_array)
+
+        self.net.setInputData(input_buffer)
 
     def forward(self):
         return self.net.forward()
-    
+
     def get_top5(self, label):
         start = time.time()
         self.forward()
@@ -187,13 +224,13 @@ class VGG19(object):
 
         # loading labels
         labels = []
-        with open('../synset_words.txt', 'r') as f:
+        with open("../synset_words.txt", "r") as f:
             labels = f.readlines()
 
         # print results
         top1 = False
         top5 = False
-        print('------ Top 5 of ' + self.image + ' ------')
+        print("------ Top 5 of " + self.image + " ------")
         prob = sorted(list(result), reverse=True)[:6]
         if result.index(prob[0]) == label:
             top1 = True
@@ -202,39 +239,45 @@ class VGG19(object):
             idx = result.index(top)
             if idx == label:
                 top5 = True
-            print('%f - '%top + labels[idx].strip())
+            print("%f - " % top + labels[idx].strip())
 
-        print('inference time: %f'%(end - start))
-        return top1,top5
-    
+        print("inference time: %f" % (end - start))
+        return top1, top5
+
     def evaluate(self, file_list):
         top1_num = 0
         top5_num = 0
         total_num = 0
 
         start = time.time()
-        with open(file_list, 'r') as f:
+        with open(file_list, "r") as f:
             file_list = f.readlines()
             total_num = len(file_list)
             for line in file_list:
                 image = line.split()[0].strip()
                 label = int(line.split()[1].strip())
                 vgg.load_image(image)
-                top1,top5 = vgg.get_top5(label)
-                if top1 :
+                top1, top5 = vgg.get_top5(label)
+                if top1:
                     top1_num += 1
-                if top5 :
+                if top5:
                     top5_num += 1
         end = time.time()
 
-        print('Global accuracy : ')
-        print('accuracy1: %f (%d/%d) '%(float(top1_num)/float(total_num), top1_num, total_num))
-        print('accuracy5: %f (%d/%d) '%(float(top5_num)/float(total_num), top5_num, total_num))
-        print('Total execution time: %f'%(end - start))
+        print("Global accuracy : ")
+        print(
+            "accuracy1: %f (%d/%d) "
+            % (float(top1_num) / float(total_num), top1_num, total_num)
+        )
+        print(
+            "accuracy5: %f (%d/%d) "
+            % (float(top5_num) / float(total_num), top5_num, total_num)
+        )
+        print("Total execution time: %f" % (end - start))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     vgg = VGG19()
     vgg.build_model()
     vgg.load_model()
-    vgg.evaluate('../file_list')
+    vgg.evaluate("../file_list")
