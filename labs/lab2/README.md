@@ -9,3 +9,14 @@
 - 实验3.2请进入exp_3_2_vgg_dlp目录，请参考目录内readme.txt补全代码并提交。
 
 - 实验3.3请进入exp_3_3_style_transfer目录，请参考目录内readme.txt补全代码并提交。
+
+# 提交打包
+- 根目录提供了一个打包脚本，可将 `exp_6_2_1_infercpu/stu_upload` 打包为提交用 zip。
+
+- 使用方法：
+
+```bash
+uv run python main.py
+```
+
+- 运行后会在根目录生成 `exp_6_2_1_infercpu_stu_upload.zip`。
