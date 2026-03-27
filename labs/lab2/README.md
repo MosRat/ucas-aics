@@ -12,6 +12,7 @@
 
 # 提交打包
 - 根目录提供了一个打包脚本，可将 `exp_6_2_1_infercpu/stu_upload` 打包为提交用 zip。
+- 压缩包内直接是 `__init__.py`、`layers_1.py`、`layers_2.py`、`vgg_cpu.py` 这几个文件，不会再额外包一层 `stu_upload/` 文件夹。
 
 - 使用方法：
 

@@ -20,7 +20,7 @@ def build_submission_zip(source_dir: Path, output_zip: Path) -> Path:
         for path in sorted(source_dir.rglob("*")):
             if not path.is_file() or not should_include(path):
                 continue
-            arcname = path.relative_to(source_dir.parent)
+            arcname = path.name
             zf.write(path, arcname)
 
     return output_zip
