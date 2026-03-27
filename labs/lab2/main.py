@@ -3,8 +3,16 @@ import zipfile
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-SOURCE_DIR = ROOT_DIR / "exp_6_2_1_infercpu" / "stu_upload"
-OUTPUT_ZIP = ROOT_DIR / "exp_6_2_1_infercpu_stu_upload.zip"
+SUBMISSIONS = (
+    (
+        ROOT_DIR / "exp_6_2_1_infercpu" / "stu_upload",
+        ROOT_DIR / "exp_6_2_1_infercpu_stu_upload.zip",
+    ),
+    (
+        ROOT_DIR / "exp_6_2_2_inferdlp" / "stu_upload",
+        ROOT_DIR / "exp_6_2_2_inferdlp_stu_upload.zip",
+    ),
+)
 
 
 def should_include(path: Path) -> bool:
@@ -27,8 +35,9 @@ def build_submission_zip(source_dir: Path, output_zip: Path) -> Path:
 
 
 def main():
-    output_zip = build_submission_zip(SOURCE_DIR, OUTPUT_ZIP)
-    print(f"Created submission archive: {output_zip}")
+    for source_dir, output_zip in SUBMISSIONS:
+        output_zip = build_submission_zip(source_dir, output_zip)
+        print(f"Created submission archive: {output_zip}")
 
 
 if __name__ == "__main__":
