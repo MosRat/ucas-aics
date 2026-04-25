@@ -1,0 +1,3 @@
+import torch
+
+def mysigmoid_cpu(dets: torch.Tensor) -> torch.Tensor: ...
