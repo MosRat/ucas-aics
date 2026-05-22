@@ -1,0 +1,5 @@
+# GitHub Linguist language overrides for course-specific source files.
+*.mlu linguist-language=C++
+
+# Verilator source file list, not Fortran.
+labs/chap7/sim/compile.f linguist-language=Verilog
